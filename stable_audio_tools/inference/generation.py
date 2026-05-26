@@ -13,6 +13,7 @@ from ..verbose import vprint
 
 def generate_diffusion_uncond(
         model,
+        noise: tp.Optional[torch.Tensor] = None,
         steps: int = 250,
         batch_size: int = 1,
         sample_size: int = 2097152,
@@ -36,8 +37,12 @@ def generate_diffusion_uncond(
     seed = seed if seed != -1 else np.random.randint(0, 2**32 - 1, dtype=np.uint32)
     vprint(f"seed: {seed}")
     torch.manual_seed(seed)
-    # Define the initial noise immediately after setting the seed
-    noise = torch.randn([batch_size, model.io_channels, sample_size], device=device)
+    
+    if noise:
+        assert noise.shape == (batch_size, model.io_channels, sample_size), "Noise shape does not match expected shape"
+        noise.to(device)
+    else:
+        noise = torch.randn([batch_size, model.io_channels, sample_size], device=device) if noise is None else noise
 
     if init_audio is not None:
         # The user supplied some initial audio (for inpainting or variation). Let us prepare the input audio.
@@ -84,6 +89,7 @@ def generate_diffusion_uncond(
 
 def generate_diffusion_cond(
         model,
+        noise: tp.Optional[torch.Tensor] = None,
         steps: int = 250,
         cfg_scale=6,
         conditioning: dict = None,
@@ -112,6 +118,7 @@ def generate_diffusion_cond(
 
     Args:
         model: The diffusion model to use for generation.
+        noise: Initial noise tensor. If not provided: random initial noise.
         steps: The number of diffusion steps to use.
         cfg_scale: Classifier-free guidance scale
         conditioning: A dictionary of conditioning parameters to use for generation.
@@ -198,7 +205,11 @@ def generate_diffusion_cond(
     seed = seed if seed != -1 else np.random.randint(0, 2**32 - 1)
     torch.manual_seed(seed)
     # Define the initial noise immediately after setting the seed
-    noise = torch.randn([batch_size, model.io_channels, latent_sample_size], device=device)
+    if noise:
+        assert noise.shape == (batch_size, model.io_channels, latent_sample_size), "Noise shape does not match expected shape"
+        noise.to(device)
+    else:
+        noise = torch.randn([batch_size, model.io_channels, latent_sample_size], device=device) if noise is None else noise
 
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
@@ -310,6 +321,7 @@ def generate_diffusion_cond(
 
 def generate_diffusion_cond_inpaint(
         model,
+        noise: tp.Optional[torch.Tensor] = None,
         steps: int = 250,
         cfg_scale=6,
         conditioning: dict = None,
@@ -340,6 +352,7 @@ def generate_diffusion_cond_inpaint(
 
     Args:
         model: The diffusion model to use for generation.
+        noise: The initial noise tensor to use for generation.
         steps: The number of diffusion steps to use.
         cfg_scale: Classifier-free guidance scale
         conditioning: A dictionary of conditioning parameters to use for generation.
@@ -467,8 +480,12 @@ def generate_diffusion_cond_inpaint(
     # The user can explicitly set the seed to deterministically generate the same output. Otherwise, use a random seed.
     seed = seed if seed != -1 else np.random.randint(0, 2**32 - 1)
     torch.manual_seed(seed)
-    # Define the initial noise immediately after setting the seed
-    noise = torch.randn([batch_size, model.io_channels, sample_size], device=device)
+    
+    if noise:
+        assert noise.shape == (batch_size, model.io_channels, sample_size), "Noise shape does not match expected shape"
+        noise.to(device)
+    else:
+        noise = torch.randn([batch_size, model.io_channels, sample_size], device=device) if noise is None else noise
 
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
