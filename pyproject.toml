@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "stable-audio-tools"
+name = "fork-stable-audio-tools"
 version = "0.0.20"
 description = "Training and inference tools for generative audio models from Stability AI"
 requires-python = ">=3.10,<3.11"
