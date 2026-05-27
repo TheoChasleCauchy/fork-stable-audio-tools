@@ -32,6 +32,7 @@ dependencies = [
     "v-diffusion-pytorch==0.0.2",
     "vector-quantize-pytorch==1.14.41",
     "setuptools<81",
+    "pytorch_lightning",
 ]
 
 [project.optional-dependencies]
