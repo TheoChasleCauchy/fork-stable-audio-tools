@@ -206,7 +206,7 @@ def generate_diffusion_cond(
     torch.manual_seed(seed)
     # Define the initial noise immediately after setting the seed
     if noise is not None:
-        assert noise.shape == (batch_size, model.io_channels, latent_sample_size), "Noise shape does not match expected shape"
+        assert noise.shape == (batch_size, model.io_channels, latent_sample_size), f"Noise shape ({noise.shape}) does not match expected shape ({batch_size}, {model.io_channels}, {latent_sample_size})"
         noise.to(device)
     else:
         noise = torch.randn([batch_size, model.io_channels, latent_sample_size], device=device) if noise is None else noise
