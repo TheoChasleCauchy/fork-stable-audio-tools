@@ -20,7 +20,7 @@ dependencies = [
     "importlib-resources==5.12.0",
     "torchsde",
     "nnAudio",
-    #"PyWavelets==1.4.1",
+    "PyWavelets==1.4.1",
     "safetensors",
     "scipy",
     "sentencepiece==0.1.99",
