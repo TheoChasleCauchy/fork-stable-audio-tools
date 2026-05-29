@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "fork-stable-audio-tools"
 version = "0.0.21"
 description = "Training and inference tools for generative audio models from Stability AI"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.11"
 authors = [
     {name = "Stability AI"},
 ]
