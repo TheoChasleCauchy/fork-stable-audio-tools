@@ -571,58 +571,70 @@ def sample_flow_pingpong(model, x, sigmas, callback=None, disable_tqdm=False, **
     return x
 
 
-def sample_v(model, x, sigmas, eta=0, callback=None, cfg_pp=False, disable_tqdm=False, **extra_args):
-    """Draws samples from a model given starting noise. v-diffusion DDIM.
+def sample_v(
+    model,
+    x,
+    sigmas,
+    eta=0,
+    callback=None,
+    cfg_pp=False,
+    disable_tqdm=False,
+    sampler_type="ddim",  # NEW: "ddim" or "ddpm"
+    **extra_args
+):
+    """Draws samples from a model given starting noise. Supports v-diffusion DDIM and DDPM.
 
     Args:
         sigmas: Pre-computed schedule tensor of shape (steps,).
+        sampler_type: "ddim" (default) or "ddpm".
+                   - For DDPM: Ensure `get_alphas_sigmas` returns alphas/sigmas
+                     compatible with DDPM's noise schedule (i.e., `alphas[i]^2 + sigmas[i]^2 == 1`).
+        eta: Controls stochasticity. Works for both samplers (0=deterministic).
+        cfg_pp: Classifier-free guidance (works with both samplers).
     """
     ts = x.new_ones([x.shape[0]])
-
     t = sigmas.to(x.device)
     steps = len(t)
-    alphas, sigmas = get_alphas_sigmas(t)
+    alphas, sigmas_sched = get_alphas_sigmas(t)  # Renamed to avoid conflict with input `sigmas`
 
-    # The sampling loop
     for i in trange(steps, disable=disable_tqdm):
-
+        # --- Model prediction (unchanged) ---
         if cfg_pp:
-            # Get the model output (v, the predicted velocity)
             v, info = model(x, ts * t[i], return_info=True, **extra_args)
-
-            if "uncond_output" in info:
-                v_eps = info["uncond_output"]
-            else:
-                v_eps = v
+            v_eps = info.get("uncond_output", v)
         else:
             v = model(x, ts * t[i], **extra_args)
             v_eps = v
 
-        # Predict the noise and the denoised data
-        pred = x * alphas[i] - v * sigmas[i]
-        eps = x * sigmas[i] + v_eps * alphas[i]
+        # Predict denoised data and noise (unchanged)
+        pred = x * alphas[i] - v * sigmas_sched[i]  # D(x; σ) = α·x - σ·v
+        eps = x * sigmas_sched[i] + v_eps * alphas[i]  # ε = σ·x + α·v
 
         if callback is not None:
-            callback({'x': x, 't': t[i], 'sigma': sigmas[i], 'i': i, 'denoised': pred})
+            callback({'x': x, 't': t[i], 'sigma': sigmas_sched[i], 'i': i, 'denoised': pred})
 
-        # If we are not on the last timestep, compute the noisy data for the
-        # next timestep.
+        # --- Sampler-specific update ---
         if i < steps - 1:
-            # If eta > 0, adjust the scaling factor for the predicted noise
-            # downward according to the amount of additional noise to add
-            ddim_sigma = eta * (sigmas[i + 1]**2 / sigmas[i]**2).sqrt() * \
-                (1 - alphas[i]**2 / alphas[i + 1]**2).sqrt()
-            adjusted_sigma = (sigmas[i + 1]**2 - ddim_sigma**2).sqrt()
+            if sampler_type == "ddim":
+                # Original DDIM update (deterministic or stochastic)
+                ddim_sigma = eta * (sigmas_sched[i + 1]**2 / sigmas_sched[i]**2).sqrt() * \
+                    (1 - alphas[i]**2 / alphas[i + 1]**2).sqrt()
+                adjusted_sigma = (sigmas_sched[i + 1]**2 - ddim_sigma**2).sqrt()
+                x = pred * alphas[i + 1] + eps * adjusted_sigma
+                if eta:  # Stochastic DDIM
+                    x += torch.randn_like(x) * ddim_sigma
+            elif sampler_type == "ddpm":
+                # DDPM update rule: x_{t-1} = (1/√α_t) * (x_t - (1-α_t)/√(1-ᾱ_t) * ε)
+                beta_t = 1 - (alphas[i]**2 / alphas[i + 1]**2)  # 1 - α_t
+                mean = (alphas[i + 1] / alphas[i]) * (x - (beta_t / sigmas_sched[i]) * eps)
+                if eta:  # Stochastic DDPM
+                    noise = torch.randn_like(x) * (eta * beta_t).sqrt()
+                    x = mean + noise
+                else:  # Deterministic DDPM
+                    x = mean
+            else:
+                raise ValueError(f"Unknown sampler_type: {sampler_type}. Use 'ddim' or 'ddpm'.")
 
-            # Recombine the predicted noise and predicted denoised data in the
-            # correct proportions for the next step
-            x = pred * alphas[i + 1] + eps * adjusted_sigma
-
-            # Add the correct amount of fresh noise
-            if eta:
-                x += torch.randn_like(x) * ddim_sigma
-
-    # If we are on the last timestep, output the denoised data
     return pred
 
 # Soft mask inpainting is just shrinking hard (binary) mask inpainting
@@ -663,7 +675,7 @@ def sample_k(
     ):
 
     is_k_diff = sampler_type in ["k-heun", "k-lms", "k-dpmpp-2s-ancestral", "k-dpm-2", "k-dpm-fast", "k-dpm-adaptive", "dpmpp-2m-sde", "dpmpp-3m-sde","dpmpp-2m"]
-    is_v_diff = sampler_type in ["v-ddim", "v-ddim-cfgpp"]
+    is_v_diff = sampler_type in ["ddpm", "v-ddim", "v-ddim-cfgpp"]
 
     if is_k_diff:
 
@@ -705,8 +717,7 @@ def sample_k(
         elif sampler_type == "dpmpp-3m-sde":
             return K.sampling.sample_dpmpp_3m_sde(denoiser, x, sigmas, disable=False, callback=callback, extra_args=extra_args)
     elif is_v_diff:
-
-        if sigma_max > 1: # sigma_max should be between 0 and 1
+        if sigma_max > 1:  # Clamp for v-diffusion (σ ∈ [0,1])
             sigma_max = 1
 
         if cond_fn is not None:
@@ -719,10 +730,24 @@ def sample_k(
         else:
             x = noise
 
-        if sampler_type == "v-ddim" or sampler_type == "v-ddim-cfgpp":
+        # --- MODIFIED: Handle all v-diffusion samplers (ddim, v-ddim, ddpm) ---
+        if sampler_type in ["v-ddim", "v-ddim-cfgpp", "ddpm"]:
             use_cfg_pp = sampler_type == "v-ddim-cfgpp"
+            # Map to sample_v's sampler_type
+            sample_v_sampler = "ddim" if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else "ddpm"
+            eta = 0.0 if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else 1.0
+            
             t = build_schedule(steps=steps, sigma_max=sigma_max, include_endpoint=False, device=x.device)
-            return sample_v(model_fn, x, sigmas=t, eta=0.0, cfg_pp=use_cfg_pp, callback=callback, **extra_args)
+            return sample_v(
+                model_fn,
+                x,
+                sigmas=t,
+                eta=eta,
+                cfg_pp=use_cfg_pp,
+                sampler_type=sample_v_sampler,  # NEW: Pass the correct sampler_type
+                callback=callback,
+                **extra_args
+            )
     else:
         raise ValueError(f"Unknown sampler type {sampler_type}")
 
@@ -858,8 +883,8 @@ def sample_diffusion(
 
     # Sample based on diffusion objective
     if diffusion_objective == "v":
-        if sampler_type in k_diff_sampler_types or sampler_type in ["v-ddim", "v-ddim-cfgpp"]:
-            # Route through sample_k which handles k-diffusion and v-ddim samplers
+        if sampler_type in k_diff_sampler_types or sampler_type in ["ddpm", "v-ddim", "v-ddim-cfgpp"]:
+            # Route through sample_k which handles k-diffusion, ddpm, and v-ddim samplers
             # sample_k uses its own schedule (polyexponential for k-diff, internal for v-ddim)
             k_init_data = init_data if sampler_type in k_diff_sampler_types else None
 
