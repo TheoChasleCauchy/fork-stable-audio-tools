@@ -883,8 +883,8 @@ def sample_diffusion(
 
     # Sample based on diffusion objective
     if diffusion_objective == "v":
-        if sampler_type in k_diff_sampler_types or sampler_type in ["ddpm", "v-ddim", "v-ddim-cfgpp"]:
-            # Route through sample_k which handles k-diffusion, ddpm, and v-ddim samplers
+        if sampler_type in k_diff_sampler_types or sampler_type in ["v-ddpm", "v-ddim", "v-ddim-cfgpp"]:
+            # Route through sample_k which handles k-diffusion, v-ddpm, and v-ddim samplers
             # sample_k uses its own schedule (polyexponential for k-diff, internal for v-ddim)
             k_init_data = init_data if sampler_type in k_diff_sampler_types else None
 
