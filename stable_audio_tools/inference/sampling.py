@@ -719,10 +719,11 @@ def sample_k(
         else:
             x = noise
 
-        if sampler_type == "v-ddim" or sampler_type == "v-ddim-cfgpp":
-            use_cfg_pp = sampler_type == "v-ddim-cfgpp"
+        if sampler_type in ["v-ddim", "v-ddim-cfgpp", "v-ddpm", "v-ddpm-cfgpp"]:
+            use_cfg_pp = sampler_type in ["v-ddim-cfgpp", "v-ddpm-cfgpp"]
             t = build_schedule(steps=steps, sigma_max=sigma_max, include_endpoint=False, device=x.device)
-            return sample_v(model_fn, x, sigmas=t, eta=0.0, cfg_pp=use_cfg_pp, callback=callback, **extra_args)
+            eta = 0.0 if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else 1.0
+            return sample_v(model_fn, x, sigmas=t, eta=eta, cfg_pp=use_cfg_pp, callback=callback, **extra_args)
     else:
         raise ValueError(f"Unknown sampler type {sampler_type}")
 
@@ -782,7 +783,7 @@ def sample_diffusion(
         headroom_seconds: Extra seconds beyond seconds_total for valid region
         dist_shift: Distribution shift object for warping the timestep schedule, or None
         sampler_type: Sampler type. For RF: "euler", "rk4", "dpmpp", "pingpong".
-            For v-diffusion: "v-ddim", "v-ddim-cfgpp", or k-diffusion types like "dpmpp-2m-sde".
+            For v-diffusion: "v-ddim", "v-ddim-cfgpp", "v-ddpm", "v-ddpm-cfgpp", or k-diffusion types like "dpmpp-2m-sde".
         batch_cfg: Whether to use batched CFG
         rescale_cfg: Whether to use rescaled CFG
         apg_scale: APG (Adaptive Projected Guidance) scale. 1.0 = full APG, 0.0 = vanilla CFG
@@ -858,7 +859,7 @@ def sample_diffusion(
 
     # Sample based on diffusion objective
     if diffusion_objective == "v":
-        if sampler_type in k_diff_sampler_types or sampler_type in ["v-ddim", "v-ddim-cfgpp"]:
+        if sampler_type in k_diff_sampler_types or sampler_type in ["v-ddim", "v-ddim-cfgpp", "v-ddpm", "v-ddpm-cfgpp"]:
             # Route through sample_k which handles k-diffusion and v-ddim samplers
             # sample_k uses its own schedule (polyexponential for k-diff, internal for v-ddim)
             k_init_data = init_data if sampler_type in k_diff_sampler_types else None
