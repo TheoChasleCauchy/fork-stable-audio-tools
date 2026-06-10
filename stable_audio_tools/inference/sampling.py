@@ -730,11 +730,11 @@ def sample_k(
         else:
             x = noise
 
-        # --- MODIFIED: Handle all v-diffusion samplers (v-ddim, v-ddpm) ---
-        if sampler_type in ["v-ddim", "v-ddim-cfgpp", "v-ddpm", "v-ddpm-cfgpp"]:
-            use_cfg_pp = sampler_type in ["v-ddim-cfgpp", "v-ddpm-cfgpp"]
+        # --- MODIFIED: Handle all v-diffusion samplers (ddim, v-ddim, ddpm) ---
+        if sampler_type in ["v-ddim", "v-ddim-cfgpp", "v-ddpm"]:
+            use_cfg_pp = sampler_type == "v-ddim-cfgpp"
             # Map to sample_v's sampler_type
-            sample_v_sampler = "v-ddim" if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else "v-ddpm"
+            sample_v_sampler = "ddim" if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else "v-ddpm"
             eta = 0.0 if sampler_type in ["v-ddim", "v-ddim-cfgpp"] else 1.0
             
             t = build_schedule(steps=steps, sigma_max=sigma_max, include_endpoint=False, device=x.device)
