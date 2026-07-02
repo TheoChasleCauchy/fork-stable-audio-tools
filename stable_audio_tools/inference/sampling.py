@@ -663,7 +663,7 @@ def sample_k(
     ):
 
     is_k_diff = sampler_type in ["k-heun", "k-lms", "k-dpmpp-2s-ancestral", "k-dpm-2", "k-dpm-fast", "k-dpm-adaptive", "dpmpp-2m-sde", "dpmpp-3m-sde","dpmpp-2m"]
-    is_v_diff = sampler_type in ["v-ddim", "v-ddim-cfgpp"]
+    is_v_diff = sampler_type in ["v-ddim", "v-ddim-cfgpp", "v-ddpm", "v-ddpm-cfgpp"]
 
     if is_k_diff:
 
